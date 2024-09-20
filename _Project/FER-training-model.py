@@ -22,7 +22,7 @@ def analyze_emotions(frame):
         return None
 
 # Variáveis importantes
-video = cv2.VideoCapture('./videos/video_overwatch02.mp4')
+video = cv2.VideoCapture('./videos/video_overwatch04.mp4')
 emotion_data = []
 start_time = time.time()
 frame_count = 0
