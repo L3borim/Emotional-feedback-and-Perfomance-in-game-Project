@@ -1,81 +1,94 @@
-import matplotlib.pyplot as plt
-import seaborn as sns
-import numpy as np
 import pandas as pd
-import xgboost as xgb
-
-from sklearn.ensemble import (AdaBoostClassifier,
-                              ExtraTreesClassifier,
-                              RandomForestClassifier)
-
-from sklearn.metrics import (accuracy_score, classification_report, f1_score, precision_score, recall_score)
-
-from sklearn.model_selection import (cross_val_predict, cross_val_score,
-                                     train_test_split)
-
-from sklearn.naive_bayes import GaussianNB
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
-
-from sklearn.pipeline import Pipeline
-
+from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import classification_report, accuracy_score, precision_score, recall_score, f1_score
+import glob
+
+# Função auxiliar para demonstrar métricas dos modelos de classificação
+def evaluate_model(model, X_test, y_test, model_name):
+    y_pred = model.predict(X_test)
+
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred, average='weighted')  # Mudança aqui
+    recall = recall_score(y_test, y_pred, average='weighted')        # Mudança aqui
+    f1 = f1_score(y_test, y_pred, average='weighted')                # Mudança aqui
+
+    print(f"{model_name} Metrics:")
+    print(f"Acurácia: {accuracy:.4f}")
+    print(f"Precisão: {precision:.4f}")
+    print(f"Recall: {recall:.4f}")
+    print(f"F1-Score: {f1:.4f}")
+
+    return accuracy, precision, recall, f1
 
 
-# Carregar as tabelas de emoções e estatísticas
-#emotion_data = pd.read_csv('emotion_detection_results.csv')
-#performance_data = pd.read_csv('game_performance_statistics.csv')
+EMOCOES_POSSIVEIS = ['anger', 'sadness', 'fear', 'surprise', 'happiness', 'neutral']
 
-# Mesclar os dados pelas colunas de tempo (aproximando o tempo mais próximo)
-merged_data = pd.merge_asof(emotion_data.sort_values('Time'), performance_data.sort_values('Time'), on='Time')
+# Caminhos para os arquivos
+arquivos_emocoes = glob.glob('./detection-results/*.csv')
+arquivos_estatisticas = glob.glob('./game-stats/*.csv')
 
-# Codificar as emoções como números inteiros
-label_encoder = LabelEncoder()
-merged_data['Emotion'] = label_encoder.fit_transform(merged_data['Emotion'])
+# Lista para armazenar todos os rounds
+todos_os_rounds = []
 
-# Definir as features e o target (exemplo: performance)
-# Supondo que a coluna 'Performance' seja algo como 'alta', 'média', 'baixa'
-X = merged_data[['Emotion', 'Kills', 'Deaths', 'Assists']]  # Features
-y = merged_data['Performance']  # Target de classificação (pode ser uma métrica numérica ou categórica)
+# Processar cada par de arquivos
+for emocoes_path, stats_path in zip(arquivos_emocoes, arquivos_estatisticas):
+    emocoes_df = pd.read_csv(emocoes_path)
+    emocoes_df['Time'] = emocoes_df['Time'].astype(float)
+    estatisticas_df = pd.read_csv(stats_path, delimiter=';')
 
-# Dividir os dados em treino e teste
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=23)
+    for _, round_data in estatisticas_df.iterrows():
+        start_time = round_data['Start_time']
+        end_time = round_data['End_time']
 
-# Definir o modelo Random Forest
-rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
+        emocoes_round = emocoes_df[(emocoes_df['Time'] >= start_time) & (emocoes_df['Time'] < end_time)]
+        emocoes_contagem = emocoes_round['Emotion'].value_counts().to_dict()
+        emocoes_contagem.pop('neutral', None)
 
-# Treinar o modelo
-rf_model.fit(X_train, y_train)
+        round_info = round_data.to_dict()
+        round_info.update({em: emocoes_contagem.get(em, 0) for em in EMOCOES_POSSIVEIS})
+        
+        if emocoes_contagem:
+            round_info['emotion_class'] = max(emocoes_contagem, key=emocoes_contagem.get)
+        else:
+            round_info['emotion_class'] = 'neutral'
 
-# Fazer previsões
-y_pred = rf_model.predict(X_test)
+        todos_os_rounds.append(round_info)
 
-# Avaliar o modelo
-accuracy = accuracy_score(y_test, y_pred)
-print(f"Random Forest Accuracy: {accuracy:.2f}")
+# Criar DataFrame
+analise_df = pd.DataFrame(todos_os_rounds)
+analise_df = analise_df.fillna(0)
 
-# Imprimir o relatório de classificação
-print(classification_report(y_test, y_pred))
+# Definir features e alvo
+X = analise_df[['Kills', 'Deaths', 'Assists', 'Score', 'Round_result'] + EMOCOES_POSSIVEIS]
+y = analise_df['emotion_class']
 
-# Definir o modelo XGBoost
-xgb_model = xgb.XGBClassifier(use_label_encoder=False, eval_metric='mlogloss')
+# Dividir dados
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=12)
 
-# Treinar o modelo
-xgb_model.fit(X_train, y_train)
+# Normalizar
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test = scaler.transform(X_test)
 
-# Fazer previsões
-y_pred_xgb = xgb_model.predict(X_test)
+# Dicionário de modelos
+modelos = {
+    "Random Forest": RandomForestClassifier(n_estimators=100, random_state=12),
+    "SVM": SVC(kernel='linear', random_state=12),
+    "KNN": KNeighborsClassifier(n_neighbors=5),
+    "Logistic Regression": LogisticRegression(random_state=12),
+    "Decision Tree": DecisionTreeClassifier(random_state=12)
+}
 
-# Avaliar o modelo
-accuracy_xgb = accuracy_score(y_test, y_pred_xgb)
-print(f"XGBoost Accuracy: {accuracy_xgb:.2f}")
-
-# Obter as importâncias das features
-feature_importances = rf_model.feature_importances_
-
-# Visualizar as importâncias
-sns.barplot(x=feature_importances, y=X.columns)
-plt.title("Feature Importance in Random Forest")
-plt.show()
-
-xgb.plot_importance(xgb_model)
-plt.show()
+# Treinar e avaliar cada modelo
+for nome, modelo in modelos.items():
+    # Avaliação
+    modelo.fit(X_train, y_train)
+    y_pred = modelo.predict(X_test)
+    accuracy, precision, recall, f1 = evaluate_model(modelo, X_test, y_test, nome)
+    print('\n')
