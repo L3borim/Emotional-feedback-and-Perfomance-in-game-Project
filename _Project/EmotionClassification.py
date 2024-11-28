@@ -6,7 +6,7 @@ from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import classification_report, accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import classification_report, accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 import glob
 
 # Função auxiliar para demonstrar métricas dos modelos de classificação
@@ -14,9 +14,10 @@ def evaluate_model(model, X_test, y_test, model_name):
     y_pred = model.predict(X_test)
 
     accuracy = accuracy_score(y_test, y_pred)
-    precision = precision_score(y_test, y_pred, average='weighted')  # Mudança aqui
-    recall = recall_score(y_test, y_pred, average='weighted')        # Mudança aqui
-    f1 = f1_score(y_test, y_pred, average='weighted')                # Mudança aqui
+    precision = precision_score(y_test, y_pred, average='weighted', zero_division=0)
+    recall = recall_score(y_test, y_pred, average='weighted', zero_division=0)
+    f1 = f1_score(y_test, y_pred, average='weighted', zero_division=0)
+
 
     print(f"{model_name} Metrics:")
     print(f"Acurácia: {accuracy:.4f}")
@@ -27,6 +28,8 @@ def evaluate_model(model, X_test, y_test, model_name):
     return accuracy, precision, recall, f1
 
 
+# Duração média estimada para cada round
+ESTIMATED_ROUND_DURATION = 100
 EMOCOES_POSSIVEIS = ['anger', 'sadness', 'fear', 'surprise', 'happiness', 'neutral']
 
 # Caminhos para os arquivos
@@ -43,8 +46,9 @@ for emocoes_path, stats_path in zip(arquivos_emocoes, arquivos_estatisticas):
     estatisticas_df = pd.read_csv(stats_path, delimiter=';')
 
     for _, round_data in estatisticas_df.iterrows():
-        start_time = round_data['Start_time']
-        end_time = round_data['End_time']
+        round_num = round_data['Round']
+        start_time = (round_num - 1) * ESTIMATED_ROUND_DURATION
+        end_time = round_num * ESTIMATED_ROUND_DURATION
 
         emocoes_round = emocoes_df[(emocoes_df['Time'] >= start_time) & (emocoes_df['Time'] < end_time)]
         emocoes_contagem = emocoes_round['Emotion'].value_counts().to_dict()
@@ -78,11 +82,11 @@ X_test = scaler.transform(X_test)
 
 # Dicionário de modelos
 modelos = {
-    "Random Forest": RandomForestClassifier(n_estimators=100, random_state=12),
-    "SVM": SVC(kernel='linear', random_state=12),
+    "Random Forest": RandomForestClassifier(n_estimators=100, random_state=123),
+    "SVM": SVC(kernel='linear', random_state=123),
     "KNN": KNeighborsClassifier(n_neighbors=5),
-    "Logistic Regression": LogisticRegression(random_state=12),
-    "Decision Tree": DecisionTreeClassifier(random_state=12)
+    "Logistic Regression": LogisticRegression(random_state=123),
+    "Decision Tree": DecisionTreeClassifier(random_state=123)
 }
 
 # Treinar e avaliar cada modelo

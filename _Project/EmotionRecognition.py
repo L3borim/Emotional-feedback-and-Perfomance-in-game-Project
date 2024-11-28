@@ -86,7 +86,7 @@ width, height = input_size
 priors = define_img_size(input_size)
 
 # Variáveis importantes
-video = cv2.VideoCapture('./videos/Vlr5-abyss-omen.mp4')
+video = cv2.VideoCapture('./videos/video_test1.mp4')
 emotion_data = []
 start_time = time.time()
 frame_count = 0
